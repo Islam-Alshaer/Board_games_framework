@@ -11,6 +11,7 @@
 #import <iostream>
 #import <iomanip>
 #import <memory>
+#import <limits>
 
 using namespace std;
 
@@ -44,7 +45,7 @@ public:
 
     virtual bool is_game_draw() = 0;
 
-    virtual void declare_winner() = 0;
+    virtual void declare_winner(string name1, string name2) = 0;
 
     ///the following three functions just accumulate the row, column, diagonal of a certain size, and lets the logic done over them to the programmer
     ///as he is going to use a function for that, and give the function pointer as a parametar to the function
@@ -83,10 +84,10 @@ bool Board<T>::is_move_in_boundaries(const int &x, const int &y) {
 
 template <typename T>
 void Board<T>::update_board(const int &x, const int &y, const T &symbol) {
-    board[x][y] = symbol;
+    board[x][y] = toupper(symbol);
 
-    bool is_AI_move = (symbol == 0); //because we will want to undo a move in the AI
-    if(not is_AI_move)
+    bool is_undo_move = (symbol == 0); //because we will want to undo a move in the AI
+    if(not is_undo_move)
         n_moves++;
     else
         n_moves--;
@@ -252,6 +253,129 @@ public:
 };
 
 
+
+template <typename T>
+class random_style : public move_style<T>{
+public:
+    random_style(shared_ptr<Board<T>> bPtr) : move_style<T>(bPtr){
+        srand(time(nullptr)); // to make it actually random
+    }
+    void make_move(T symbol) override;
+};
+
+
+
+template <typename T>
+void random_style<T>::make_move(T symbol) {
+    int x = this->boardPtr->get_rows() + 1; //dummy initial values
+    int y = this->boardPtr->get_columns() + 1;
+
+    while(not this->boardPtr->is_valid_move(x, y)){
+        x = rand() % this->boardPtr->get_rows();
+        y = rand() % this->boardPtr->get_columns();
+    }
+
+    this->boardPtr->update_board(x, y, symbol);
+}
+
+
+template <typename T>
+class AIstyle : public move_style<T>{
+public:
+    AIstyle(shared_ptr<Board<T>> bPtr) : move_style<T>(bPtr){}
+    void make_move(T symbol) override;
+    int calculateMinMax(T s, bool isMaximizing);
+};
+
+
+template <typename T>
+void AIstyle<T>::make_move(T symbol) {
+
+    // First, check if we can win in the next move
+    for (int i = 0; i < this->boardPtr->get_rows(); ++i) {
+        for (int j = 0; j < this->boardPtr->get_columns(); ++j) {
+            if (this->boardPtr->is_valid_move(i, j)) {
+                this->boardPtr->update_board(i, j, symbol);
+                if (this->boardPtr->is_game_won()) {
+                    return;
+                }
+                this->boardPtr->update_board(i, j, 0); // Undo move
+            }
+        }
+    }
+
+    T opponentSymbol = (symbol == 'X') ? 'O' : 'X';
+    // Second, check if the opponent can win in their next move and block them
+    for (int i = 0; i < this->boardPtr->get_rows(); ++i) {
+        for (int j = 0; j < this->boardPtr->get_columns(); ++j) {
+            if (this->boardPtr->is_valid_move(i, j)) {
+                this->boardPtr->update_board(i, j, opponentSymbol);
+
+                if (this->boardPtr->is_game_won()){
+                    this->boardPtr->update_board(i, j, 0); //undo the opponent symbol
+                    this->boardPtr->update_board(i, j, symbol); //block them
+                    return;
+                }
+
+                this->boardPtr->update_board(i, j, 0); // Undo move
+            }
+        }
+    }
+
+    int bestValue = std::numeric_limits<int>::min();
+    std::pair<int, int> bestMove = {-1, -1};
+    // If no immediate win use MinMax to find the best move
+    for (int i = 0; i < this->boardPtr->get_rows(); ++i) {
+        for (int j = 0; j < this->boardPtr->get_columns(); ++j) {
+            if (this->boardPtr->is_valid_move(i, j)) {
+                this->boardPtr->update_board(i, j, symbol);
+                int moveValue = calculateMinMax(symbol, false);
+                this->boardPtr->update_board(i, j, 0); // Undo move
+                if (moveValue > bestValue) {
+                    bestMove = {i, j};
+                    bestValue = moveValue;
+                }
+            }
+        }
+    }
+
+    this->boardPtr->update_board(bestMove.first, bestMove.second, symbol);
+    return;
+}
+
+// Minimax algorithm to evaluate the board
+template <typename T>
+int AIstyle<T>::calculateMinMax(T s, bool isMaximizing) {
+    if (this->boardPtr->is_game_won()) {
+        return isMaximizing ? -1 : 1;
+    } else if (this->boardPtr->is_game_draw()) {
+        return 0;
+    }
+
+    int bestValue = isMaximizing ? std::numeric_limits<int>::min() : std::numeric_limits<int>::max();
+    T opponentSymbol = (s == 'X') ? 'O' : 'X';
+
+    for (int i = 0; i < this->boardPtr->get_rows(); ++i) {
+        for (int j = 0; j < this->boardPtr->get_columns(); ++j) {
+            if (this->boardPtr->is_valid_move(i, j)) {
+                this->boardPtr->update_board(i, j, s);
+                int value = calculateMinMax(opponentSymbol, !isMaximizing);
+                this->boardPtr->update_board(i, j, 0); // Undo move
+
+                if (isMaximizing) {
+                    bestValue = std::max(bestValue, value);
+                }else{
+                    bestValue = std::min(bestValue, value);
+                }
+            }
+        }
+    }
+
+    return bestValue;
+}
+
+
+
 template <typename T>
 class Player { //player is not responsible for making a valid move
 protected:
@@ -311,14 +435,15 @@ public:
     GameManager(shared_ptr<Board<T>> bPtr, vector<shared_ptr<Player<T>>> p);
 
     void run();
-};
 
+    virtual ~GameManager(){}
+};
 
 template <typename T>
 GameManager<T>::GameManager(shared_ptr<Board<T>> bPtr, vector<shared_ptr<Player<T>>> p) {
     boardPtr = bPtr;
-    players.push_back(p[0]);
-    players.push_back(p[1]);
+    players.push_back((shared_ptr<Player<T>>)p[0]);
+    players.push_back((shared_ptr<Player<T>>)p[1]);
 }
 
 template <typename T>
@@ -333,7 +458,7 @@ void GameManager<T>::run() {
             boardPtr->display_board();
             /// the previous version supposed that always if a win happens, the last one to play is the winner, which is not always the case
             if (boardPtr->is_game_won()) {
-                boardPtr->declare_winner();
+                boardPtr->declare_winner(players[i]->getname(), players[!i]->getname());
                 return;
             }
             if (boardPtr->is_game_draw()) {
@@ -345,4 +470,4 @@ void GameManager<T>::run() {
 }
 
 
-#endif //TRYING_HARD_ENHANCED_FRAMEWORK_H
+#endif //ENHANCED_FRAMEWORK_H

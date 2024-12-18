@@ -11,7 +11,7 @@ public:
     bool is_valid_move(const int &x, const int &y) override;
     bool is_game_won() override;
     bool is_game_draw() override;
-    void declare_winner() override;
+    void declare_winner(string name1, string name2) override;
 };
 
 bool Board3x3::is_valid_move(const int &x, const int &y) {
@@ -61,8 +61,8 @@ bool Board3x3::is_game_draw() {
     return (n_moves == 9);
 }
 
-void Board3x3::declare_winner() {
-    cout << "Player : " << winner << " has won!" << endl;
+void Board3x3::declare_winner(string name1, string name2) {
+    cout << "Player : " << name1 << " has won!" << endl;
 }
 
 class move_style3x3 : public move_style<char> {
@@ -94,21 +94,30 @@ int main(void){
     move_style3x3 human_style(boardptr);
     shared_ptr<move_style<char>> styleptr(&human_style);
 
+    random_style<char> randomized_style(boardptr);
+    shared_ptr<move_style<char>> randomPtr(&randomized_style);
+
+    AIstyle<char> AI_style(boardptr);
+    shared_ptr<move_style<char>> AIPtr(&AI_style);
+
     Player<char> player1("islam", 'X', styleptr);
-    Player<char> player2("ahmed", 'O', styleptr);
+//    Player<char> player2("ahmed", 'O', styleptr);
+
+//    Player<char> randomy("indomi", 'O', randomPtr);
+
+    Player<char> cyborg("cyborg", 'O', AIPtr);
 
     shared_ptr<Player<char>> player1ptr(&player1);
-    shared_ptr<Player<char>> player2ptr(&player2);
-
+//    shared_ptr<Player<char>> player2ptr(&randomy);
+    shared_ptr<Player<char>> player2ptr(&cyborg);
 
     vector<shared_ptr<Player<char>>> players;
-    players.push_back(player1ptr);
     players.push_back(player2ptr);
+    players.push_back(player1ptr);
 
     GameManager<char> mygame(boardptr, players);
     mygame.run();
-
-
+    return 0;
 }
 
 
