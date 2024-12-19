@@ -61,7 +61,7 @@ public:
 
     int get_columns() const {return columns;}
 
-    virtual ~Board(); //it's always better to make a virtual destructor to avoid memory leak
+    virtual ~Board(){} //it's always better to make a virtual destructor to avoid memory leak
 };
 
 //putting the implementation just down the class made more sense for me during the assignment
@@ -235,21 +235,13 @@ int Board<T>::countsouthwest(int sequence_length, bool (*Is_valid) (const vector
 
 
 template <typename T>
-Board<T>::~Board(){
-
-};
-
-
-
-
-
-template <typename T>
 class move_style { ///it's always better to avoid inheritance as much as possible, so we always use player, but inject the dependency over move_style in the constructor
 protected:
     shared_ptr<Board<T>> boardPtr;
 public:
     move_style(shared_ptr<Board<T>> bPtr){boardPtr = bPtr;}
     virtual void make_move(T symbol) = 0;
+    virtual ~move_style(){}
 };
 
 
